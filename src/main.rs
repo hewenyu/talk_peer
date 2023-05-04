@@ -1,51 +1,35 @@
-use std::error::Error;
-use std::fs::File;
-use std::io::prelude::*;
-use std::net::TcpListener;
-use std::net::TcpStream;
+// main.rs
+mod client;
+mod server;
 
+use std::fs::File;
+use std::io::Read;
+use toml::Value;
 
 fn main() {
-    // start listen
-    let listener = TcpListener::bind("0.0.0.0:8000").unwrap();
-    println!("Server started at :8080");
+    let mut config_file = File::open("config.toml").expect("配置文件未找到");
+    let mut config_toml = String::new();
+    config_file
+        .read_to_string(&mut config_toml)
+        .expect("读取配置文件出错");
 
-    // wait incoming connection
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
-        println!("Connection established!");
-        // handle connection
+    let config: Value = config_toml.parse().expect("解析配置文件出错");
 
-        if let Err(e) = handle_connection(stream) {
-            println!("Error: {}", e);
+    let mode = config
+        .get("settings")
+        .and_then(|s| s.get("mode"))
+        .and_then(|m| m.as_str());
+
+    match mode {
+        Some("server") => {
+            println!("运行为服务端");
+            server::run_server();
         }
+        Some("client") => {
+            println!("运行为客户端");
+            client::run_client();
+        }
+        Some(_) => println!("无效的运行模式，请检查配置文件"),
+        None => println!("配置文件中未指定运行模式"),
     }
-}
-
-// function to handle connection
-fn handle_connection(mut stream: TcpStream) -> Result<(), Box<dyn Error>> {
-    // read request
-    let mut buffer = [0; 1024];
-    stream.read(&mut buffer)?;
-
-    // parse request
-    let request = String::from_utf8_lossy(&buffer[..]);
-    let request = request.split_whitespace().collect::<Vec<&str>>();
-
-    // get path
-    let path = request[1];
-
-    // get file
-    let mut file = File::open(&path[1..])?;
-
-    // read file
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-
-    // write response
-    let response = format!("HTTP/1.1 200 OK\r\n\r\n{}", contents);
-    stream.write(response.as_bytes())?;
-    stream.flush()?;
-
-    Ok(())
 }
